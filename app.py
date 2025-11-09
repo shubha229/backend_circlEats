@@ -82,6 +82,15 @@ def get_donations():
         result.append(d)
     return jsonify(result), 200
 
+# ✅ Get donations by user_id
+@app.route("/api/my_donations/<user_id>", methods=["GET"])
+def get_user_donations(user_id):
+    data = []
+    for d in donations.find({"user_id": user_id}):
+        d["_id"] = str(d["_id"])
+        data.append(d)
+    return jsonify(data), 200
+
 # -------------------------------
 # 5️⃣ Collect Donation (Volunteer)
 # -------------------------------
