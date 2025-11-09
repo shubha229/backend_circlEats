@@ -120,5 +120,14 @@ def get_donations():
         all_donations.append(d)
     return jsonify(all_donations), 200
 
+
+# -------------------------------
+# 🩵 Root Health Check Route
+# -------------------------------
+@app.route("/")
+def home():
+    return jsonify({"message": "CircleEats backend running!"})
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=7860)
