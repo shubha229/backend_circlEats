@@ -111,15 +111,16 @@ def donate_to_shelter(donation_id):
 # -------------------------------
 # 6️⃣ Get All Donations (for Admin/Volunteer view)
 # -------------------------------
-@app.route("/api/donations", methods=["GET"])
-def get_donations():
-    all_donations = []
-    for d in donations.find():
-        d["_id"] = str(d["_id"])
-        d["user_id"] = str(d["user_id"])
-        all_donations.append(d)
-    return jsonify(all_donations), 200
-
+@app.route('/api/create_donation', methods=['POST'])
+def create_donation():
+    try:
+        data = request.get_json()
+        # print(data)  # Add this temporarily
+        mongo.db.donations.insert_one(data)
+        return jsonify({"message": "Donation created successfully"}), 201
+    except Exception as e:
+        print("❌ Error creating donation:", e)
+        return jsonify({"error": str(e)}), 500
 
 # -------------------------------
 # 🩵 Root Health Check Route
