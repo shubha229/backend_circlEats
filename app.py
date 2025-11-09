@@ -17,7 +17,7 @@ mongo = PyMongo(app)
 
 # ✅ Collections
 users = mongo.db.users
-donations = mongo.db.donor  # your chosen collection name
+donations = mongo.db.donations  # your chosen collection name
 
 # -------------------------------
 # 1️⃣ Signup
