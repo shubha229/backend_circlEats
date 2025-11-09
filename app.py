@@ -16,8 +16,10 @@ app.config["MONGO_URI"] = os.getenv("MONGO_URI")  # e.g. mongodb+srv://.../circl
 mongo = PyMongo(app)
 
 # ✅ Collections
-users = mongo.db.users
-donations = mongo.db.donations  # your chosen collection name
+client = mongo.cx
+db = client["circlEatsDB"]
+users = db["users"]
+donations = db["donor"]
 
 # -------------------------------
 # 1️⃣ Signup
