@@ -3,15 +3,18 @@ from flask_pymongo import PyMongo
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 from bson import ObjectId
+from dotenv import load_dotenv
+load_dotenv()
 import os
+
 
 app = Flask(__name__)
 CORS(app)
 
 # MongoDB Atlas Config
-app.config["MONGO_URI"] = "mongodb+srv://circlEatsUser:yourpassword@cluster0.mongodb.net/circlEatsDB"
+app.config["MONGO_URI"] = os.getenv("MONGO_URI")
 mongo = PyMongo(app)
-
+    
 # Collections
 users = mongo.db.users
 donations = mongo.db.donations
@@ -118,4 +121,4 @@ def get_donations():
     return jsonify(all_donations), 200
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    app.run(host="0.0.0.0", port=7860)
