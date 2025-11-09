@@ -4,9 +4,10 @@ from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 from bson import ObjectId
 from dotenv import load_dotenv
-load_dotenv()
 import os
 
+# Load environment variables
+load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
@@ -14,10 +15,11 @@ CORS(app)
 # MongoDB Atlas Config
 app.config["MONGO_URI"] = os.getenv("MONGO_URI")
 mongo = PyMongo(app)
-    
+
 # Collections
 users = mongo.db.users
 donations = mongo.db.donations
+
 
 # -------------------------------
 # 1️⃣ Signup Route
@@ -36,6 +38,7 @@ def signup():
     users.insert_one({"name": name, "email": email, "password": hashed_pw})
     return jsonify({"message": "Signup successful!"}), 201
 
+
 # -------------------------------
 # 2️⃣ Login Route
 # -------------------------------
@@ -52,29 +55,39 @@ def login():
             "user_id": str(user["_id"]),
             "name": user["name"]
         }), 200
+
     return jsonify({"error": "Invalid credentials"}), 401
 
+
 # -------------------------------
-# 3️⃣ Create Donation
+# 3️⃣ Create Donation (Fixed)
 # -------------------------------
 @app.route("/api/create_donation", methods=["POST"])
 def create_donation():
-    data = request.get_json()
-    user_id = data.get("user_id")
-    item = data.get("item")
-    quantity = data.get("quantity")
-    location = data.get("location")
+    try:
+        data = request.get_json()
+        print("📥 Received donation data:", data)
 
-    donations.insert_one({
-        "user_id": ObjectId(user_id),
-        "item": item,
-        "quantity": quantity,
-        "location": location,
-        "status": "Pending",
-        "collected_by": None,
-        "donated_to": None
-    })
-    return jsonify({"message": "Donation created successfully"}), 201
+        user_id = data.get("user_id")
+        item = data.get("item")
+        quantity = data.get("quantity")
+        location = data.get("location")
+
+        donations.insert_one({
+            "user_id": ObjectId(user_id),
+            "item": item,
+            "quantity": quantity,
+            "location": location,
+            "status": "Pending",
+            "collected_by": None,
+            "donated_to": None
+        })
+
+        return jsonify({"message": "Donation created successfully"}), 201
+    except Exception as e:
+        print("❌ Error creating donation:", e)
+        return jsonify({"error": str(e)}), 500
+
 
 # -------------------------------
 # 4️⃣ Mark as Collected
@@ -88,9 +101,11 @@ def collect_donation(donation_id):
         {"_id": ObjectId(donation_id)},
         {"$set": {"status": "Collected", "collected_by": volunteer}}
     )
+
     if result.modified_count:
         return jsonify({"message": "Donation marked as collected"}), 200
     return jsonify({"error": "Donation not found"}), 404
+
 
 # -------------------------------
 # 5️⃣ Mark as Donated
@@ -104,31 +119,34 @@ def donate_to_shelter(donation_id):
         {"_id": ObjectId(donation_id)},
         {"$set": {"status": "Donated", "donated_to": shelter}}
     )
+
     if result.modified_count:
         return jsonify({"message": "Donation marked as donated"}), 200
     return jsonify({"error": "Donation not found"}), 404
 
-# -------------------------------
-# 6️⃣ Get All Donations (for Admin/Volunteer view)
-# -------------------------------
-@app.route('/api/create_donation', methods=['POST'])
-def create_donation():
-    try:
-        data = request.get_json()
-        # print(data)  # Add this temporarily
-        mongo.db.donations.insert_one(data)
-        return jsonify({"message": "Donation created successfully"}), 201
-    except Exception as e:
-        print("❌ Error creating donation:", e)
-        return jsonify({"error": str(e)}), 500
 
 # -------------------------------
-# 🩵 Root Health Check Route
+# 6️⃣ Get All Donations (optional)
+# -------------------------------
+@app.route("/api/donations", methods=["GET"])
+def get_all_donations():
+    all_donations = list(donations.find())
+    for d in all_donations:
+        d["_id"] = str(d["_id"])
+        d["user_id"] = str(d["user_id"])
+    return jsonify(all_donations), 200
+
+
+# -------------------------------
+# 🩵 Root Health Check
 # -------------------------------
 @app.route("/")
 def home():
-    return jsonify({"message": "CircleEats backend running!"})
+    return jsonify({"message": "CirclEats backend running successfully!"})
 
 
+# -------------------------------
+# 🔥 Run Server
+# -------------------------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=7860)
