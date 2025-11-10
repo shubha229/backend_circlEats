@@ -117,6 +117,36 @@ def donate_to_shelter(donation_id):
     )
     return jsonify({"message": "Donation marked as donated"}), 200
 
+# ✅ Shelter Accepts Food (includes location)
+@app.route("/api/shelter_accept/<donation_id>", methods=["PUT"])
+def shelter_accept(donation_id):
+    try:
+        data = request.get_json()
+        shelter_email = data.get("shelter")
+        shelter_location = data.get("location")
+
+        if not shelter_email or not shelter_location:
+            return jsonify({"error": "Shelter email and location required"}), 400
+
+        result = donations.update_one(
+            {"_id": ObjectId(donation_id)},
+            {
+                "$set": {
+                    "status": "Donated",
+                    "donated_to": shelter_email,
+                    "shelter_location": shelter_location,
+                }
+            },
+        )
+
+        if result.modified_count:
+            return jsonify({"message": "Donation successfully assigned to shelter"}), 200
+        else:
+            return jsonify({"error": "Donation not found"}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # -------------------------------
 # 7️⃣ Health Check
 # -------------------------------
