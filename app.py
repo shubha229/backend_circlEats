@@ -122,23 +122,33 @@ def shelter_request(donation_id):
     data = request.get_json()
     shelter_email = data.get("shelter")
     shelter_location = data.get("location")
+    self_pickup = data.get("self_pickup", False)
+
+    # Update donation to mark as requested
+    update_data = {
+        "status": "Requested",
+        "shelter_request": {
+            "email": shelter_email,
+            "location": shelter_location,
+            "self_pickup": self_pickup
+        }
+    }
 
     result = donations.update_one(
         {"_id": ObjectId(donation_id), "status": "Pending"},
-        {
-            "$set": {
-                "status": "Requested",
-                "shelter_request": {
-                    "email": shelter_email,
-                    "location": shelter_location
-                }
-            }
-        }
+        {"$set": update_data}
     )
 
     if result.modified_count:
-        return jsonify({"message": "Request sent to volunteers!"}), 200
-    return jsonify({"error": "Donation not found or already assigned"}), 404
+        msg = "Food request created successfully!"
+        if self_pickup:
+            msg += " Shelter will collect it themselves."
+        else:
+            msg += " Waiting for volunteer acceptance."
+        return jsonify({"message": msg}), 200
+    else:
+        return jsonify({"error": "Donation not found or already assigned"}), 404
+
 
 
 # ✅ Shelter Accepts Food (includes location)
@@ -173,10 +183,15 @@ def shelter_accept(donation_id):
 @app.route("/api/shelter_requests", methods=["GET"])
 def get_shelter_requests():
     result = []
-    for d in donations.find({"status": "Requested"}):
+    for d in donations.find({
+        "status": "Requested",
+        "shelter_request.self_pickup": {"$ne": True}  # exclude self pickups
+    }):
         d["_id"] = str(d["_id"])
         result.append(d)
     return jsonify(result), 200
+
+    
 @app.route("/api/accept_delivery/<donation_id>", methods=["PUT"])
 def accept_delivery(donation_id):
     data = request.get_json()
@@ -204,7 +219,16 @@ def accept_delivery(donation_id):
     )
 
     return jsonify({"message": "Delivery accepted and shelter notified!"}), 200
-    
+
+@app.route("/api/my_shelter_requests/<email>", methods=["GET"])
+def my_shelter_requests(email):
+    data = []
+    for d in donations.find({"shelter_request.email": email}):
+        d["_id"] = str(d["_id"])
+        data.append(d)
+    return jsonify(data), 200
+
+
 #---Shelter fetches notifications----    
 @app.route("/api/notifications/<shelter_email>", methods=["GET"])
 def get_notifications(shelter_email):
