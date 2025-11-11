@@ -124,7 +124,6 @@ def shelter_request(donation_id):
     shelter_location = data.get("location")
     self_pickup = data.get("self_pickup", False)
 
-    # Update donation to mark as requested
     update_data = {
         "status": "Requested",
         "shelter_request": {
@@ -148,7 +147,6 @@ def shelter_request(donation_id):
         return jsonify({"message": msg}), 200
     else:
         return jsonify({"error": "Donation not found or already assigned"}), 404
-
 
 
 # ✅ Shelter Accepts Food (includes location)
@@ -185,7 +183,7 @@ def get_shelter_requests():
     result = []
     for d in donations.find({
         "status": "Requested",
-        "shelter_request.self_pickup": {"$ne": True}  # exclude self pickups
+        "shelter_request.self_pickup": {"$ne": True}
     }):
         d["_id"] = str(d["_id"])
         result.append(d)
