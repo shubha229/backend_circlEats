@@ -192,9 +192,11 @@ def get_shelter_requests():
 @app.route("/api/my_deliveries/<volunteer>", methods=["GET"])
 def get_my_deliveries(volunteer):
     try:
-        deliveries = list(db.delivery_requests.find({"volunteer": volunteer}))
+        deliveries = list(donations.find({
+            "collected_by": volunteer,      # volunteer email is stored here
+            "status": "In Transit"          # accepted deliveries
+        }))
 
-        # convert ObjectId to string
         for d in deliveries:
             d["_id"] = str(d["_id"])
             if "shelter_request" in d and d["shelter_request"]:
@@ -204,7 +206,7 @@ def get_my_deliveries(volunteer):
         return jsonify(deliveries), 200
 
     except Exception as e:
-        print("Error in /my_deliveries:", e)
+        print("Error:", e)
         return jsonify({"error": "Server error"}), 500
 
     
