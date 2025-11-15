@@ -5,6 +5,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from bson import ObjectId
 from dotenv import load_dotenv
 import os
+from geopy.geocoders import Nominatim
 
 load_dotenv()
 
@@ -117,37 +118,37 @@ def donate_to_shelter(donation_id):
     )
     return jsonify({"message": "Donation marked as donated"}), 200
 
+from geopy.geocoders import Nominatim
+
 @app.route("/api/shelter_request/<donation_id>", methods=["PUT"])
 def shelter_request(donation_id):
     data = request.get_json()
     shelter_email = data.get("shelter")
-    shelter_location = data.get("location")
-    self_pickup = data.get("self_pickup", False)
+    location_data = data.get("location")  # e.g. "13.1486, 77.6035"
+
+    # Convert coordinates -> human readable address
+    geolocator = Nominatim(user_agent="circlEats")
+    lat, lon = location_data.split(",")
+    address = geolocator.reverse(f"{lat}, {lon}").address
 
     update_data = {
         "status": "Requested",
         "shelter_request": {
             "email": shelter_email,
-            "location": shelter_location,
-            "self_pickup": self_pickup
+            "location": address,     # ✅ Store full address instead of coordinates
+            "self_pickup": data.get("self_pickup", False)
         }
     }
 
     result = donations.update_one(
-        {"_id": ObjectId(donation_id), "status": "Pending"},
+        {"_id": ObjectId(donation_id)},
         {"$set": update_data}
     )
 
     if result.modified_count:
-        msg = "Food request created successfully!"
-        if self_pickup:
-            msg += " Shelter will collect it themselves."
-        else:
-            msg += " Waiting for volunteer acceptance."
-        return jsonify({"message": msg}), 200
+        return jsonify({"message": "Food request created successfully!"}), 200
     else:
-        return jsonify({"error": "Donation not found or already assigned"}), 404
-
+        return jsonify({"error": "Donation not found"}), 404
 
 # ✅ Shelter Accepts Food (includes location)
 @app.route("/api/shelter_accept/<donation_id>", methods=["PUT"])
