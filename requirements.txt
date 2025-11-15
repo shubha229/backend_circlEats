@@ -3,3 +3,4 @@ flask_pymongo
 flask_cors
 werkzeug
 python-dotenv
+geopy
