@@ -11,40 +11,29 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app)
 
-# MongoDB Connection
+# MongoDB
 app.config["MONGO_URI"] = os.getenv("MONGO_URI")
 mongo = PyMongo(app)
-
-# Collections
-client = mongo.cx
-db = client["circlEatsDB"]
+db = mongo.cx["circlEatsDB"]
 users = db["users"]
 donations = db["donor"]
 
-# ------------------------------------------------------
 # SIGNUP
-# ------------------------------------------------------
 @app.route("/api/signup", methods=["POST"])
 def signup():
     data = request.get_json()
-
     if users.find_one({"email": data["email"]}):
         return jsonify({"error": "User already exists"}), 400
 
-    hashed_pw = generate_password_hash(data["password"])
-
+    hashed = generate_password_hash(data["password"])
     users.insert_one({
         "name": data["name"],
         "email": data["email"],
-        "password": hashed_pw
+        "password": hashed
     })
-
     return jsonify({"message": "Signup successful!"}), 201
 
-
-# ------------------------------------------------------
 # LOGIN
-# ------------------------------------------------------
 @app.route("/api/login", methods=["POST"])
 def login():
     data = request.get_json()
@@ -60,236 +49,101 @@ def login():
 
     return jsonify({"error": "Invalid credentials"}), 401
 
-
-# ------------------------------------------------------
-# CREATE DONATION
-# ------------------------------------------------------
+# CREATE DONATION  (Donor)
 @app.route("/api/create_donation", methods=["POST"])
 def create_donation():
-    try:
-        data = request.get_json()
-
-        donations.insert_one({
-            "user_id": data.get("user_id"),
-            "item": data.get("item"),
-            "quantity": data.get("quantity"),
-            "location": data.get("location"),
-            "status": "Pending",
-            "collected_by": None,
-            "donated_to": None
-        })
-
-        return jsonify({"message": "Donation created successfully"}), 201
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-# ------------------------------------------------------
-# GET ALL DONATIONS
-# ------------------------------------------------------
-@app.route("/api/donations", methods=["GET"])
-def get_donations():
-    result = []
-    for d in donations.find():
-        d["_id"] = str(d["_id"])
-        result.append(d)
-    return jsonify(result), 200
-
-
-# ------------------------------------------------------
-# USER'S DONATIONS
-# ------------------------------------------------------
-@app.route("/api/my_donations/<user_id>", methods=["GET"])
-def get_user_donations(user_id):
-    data = []
-    for d in donations.find({"user_id": user_id}):
-        d["_id"] = str(d["_id"])
-        data.append(d)
-    return jsonify(data), 200
-
-
-# ------------------------------------------------------
-# VOLUNTEER COLLECTS DONATION
-# ------------------------------------------------------
-@app.route("/api/collect_donation/<donation_id>", methods=["PUT"])
-def collect_donation(donation_id):
     data = request.get_json()
-    result = donations.update_one(
-        {"_id": ObjectId(donation_id)},
-        {"$set": {
-            "status": "Collected",
-            "collected_by": data.get("volunteer")
-        }}
-    )
-    return jsonify({
-        "message": "Donation collected!" if result.modified_count else "Donation not found"
-    }), 200
+    donations.insert_one({
+        "user_id": data.get("user_id"),
+        "item": data.get("item"),
+        "quantity": data.get("quantity"),
+        "location": data.get("location"),
+        "status": "Pending",
+        "requested_by": None,
+        "accepted_by": None,
+        "shelter_request": None,
+        "notifications": []
+    })
+    return jsonify({"message": "Donation created"}), 201
 
+# DONOR DASHBOARD — Clean, private
+@app.route("/api/my_donations/<user_id>", methods=["GET"])
+def my_donations(user_id):
+    res = list(donations.find({"user_id": user_id}))
+    for r in res:
+        r["_id"] = str(r["_id"])
+    return jsonify(res), 200
 
-# ------------------------------------------------------
-# SHELTER REQUESTS A DONATION (DELIVERY OR SELF PICKUP)
-# ------------------------------------------------------
+# ➡ Hides all volunteer notifications from others
+@app.route("/api/my_notifications/<user_id>", methods=["GET"])
+def my_notifications(user_id):
+    res = []
+    for d in donations.find({"user_id": user_id}):
+        res.extend(d.get("notifications", []))
+    return jsonify(res), 200
+
+# SHELTER REQUESTS DELIVERY
 @app.route("/api/shelter_request/<donation_id>", methods=["PUT"])
 def shelter_request(donation_id):
     data = request.get_json()
-
-    update_data = {
-        "status": "Requested",
-        "shelter_request": {
-            "email": data.get("shelter"),
-            "location": data.get("location"),   # full readable address from frontend
-            "self_pickup": data.get("self_pickup", False)
-        }
-    }
-
-    result = donations.update_one(
+    donations.update_one(
         {"_id": ObjectId(donation_id)},
-        {"$set": update_data}
+        {"$set": {
+            "status": "Requested",
+            "requested_by": data.get("shelter"),  # 🔥 PRIVATE ownership
+            "shelter_request": {
+                "email": data.get("shelter"),
+                "location": data.get("location"),
+                "self_pickup": data.get("self_pickup", False)
+            }
+        }}
     )
+    return jsonify({"message": "Request submitted"}), 200
 
-    if result.modified_count:
-        return jsonify({"message": "Food request created successfully!"}), 200
-    else:
-        return jsonify({"error": "Donation not found"}), 404
+# SHELTER DASHBOARD — Own private requests only
+@app.route("/api/my_requests/<email>", methods=["GET"])
+def my_requests(email):
+    res = list(donations.find({"requested_by": email}))
+    for r in res:
+        r["_id"] = str(r["_id"])
+    return jsonify(res), 200
 
-
-# ------------------------------------------------------
-# SHELTER ACCEPTS FOOD DIRECTLY
-# ------------------------------------------------------
-@app.route("/api/shelter_accept/<donation_id>", methods=["PUT"])
-def shelter_accept(donation_id):
-    try:
-        data = request.get_json()
-        shelter_email = data.get("shelter")
-        shelter_location = data.get("location")
-
-        if not shelter_email or not shelter_location:
-            return jsonify({"error": "Shelter email and location required"}), 400
-
-        result = donations.update_one(
-            {"_id": ObjectId(donation_id)},
-            {"$set": {
-                "status": "Donated",
-                "donated_to": shelter_email,
-                "shelter_location": shelter_location
-            }}
-        )
-
-        if result.modified_count:
-            return jsonify({"message": "Donation assigned to shelter"}), 200
-        else:
-            return jsonify({"error": "Donation not found"}), 404
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-# ------------------------------------------------------
-# GET SHELTER REQUESTS (FOR VOLUNTEERS)
-# ------------------------------------------------------
+# VOLUNTEER VISIBLE REQUESTS ONLY
 @app.route("/api/shelter_requests", methods=["GET"])
-def get_shelter_requests():
-    result = []
-    for d in donations.find({
-        "status": "Requested",
-        "shelter_request.self_pickup": {"$ne": True}
-    }):
-        d["_id"] = str(d["_id"])
-        result.append(d)
-    return jsonify(result), 200
+def shelter_requests():
+    res = list(donations.find({"status": "Requested"}))
+    for r in res:
+        r["_id"] = str(r["_id"])
+    return jsonify(res), 200
 
-
-# ------------------------------------------------------
-# VOLUNTEER'S ACCEPTED DELIVERIES
-# ------------------------------------------------------
-@app.route("/api/my_deliveries/<volunteer>", methods=["GET"])
-def get_my_deliveries(volunteer):
-    try:
-        deliveries = list(donations.find({
-            "collected_by": volunteer,
-            "status": "In Transit"
-        }))
-
-        for d in deliveries:
-            d["_id"] = str(d["_id"])
-
-            if "shelter_request" in d and d["shelter_request"]:
-                if "_id" in d["shelter_request"]:
-                    d["shelter_request"]["_id"] = str(d["shelter_request"]["_id"])
-
-        return jsonify(deliveries), 200
-
-    except Exception as e:
-        print("Error:", e)
-        return jsonify({"error": "Server error"}), 500
-
-
-# ------------------------------------------------------
-# VOLUNTEER ACCEPTS DELIVERY
-# ------------------------------------------------------
+# VOLUNTEER ACCEPT DELIVERY
 @app.route("/api/accept_delivery/<donation_id>", methods=["PUT"])
 def accept_delivery(donation_id):
     data = request.get_json()
-    volunteer_email = data.get("volunteer")
-
-    donation = donations.find_one({"_id": ObjectId(donation_id)})
-    if not donation:
-        return jsonify({"error": "Donation not found"}), 404
+    volunteer = data.get("volunteer")
 
     donations.update_one(
         {"_id": ObjectId(donation_id)},
-        {
-            "$set": {
-                "status": "In Transit",
-                "collected_by": volunteer_email,
-                "volunteer_request": {"email": volunteer_email}
-            },
-            "$push": {
-                "notifications": {
-                    "to": donation.get("shelter_request", {}).get("email"),
-                    "message": f"Volunteer {volunteer_email} accepted your request."
-                }
-            }
-        }
+        {"$set": {
+            "status": "In Transit",
+            "collected_by": volunteer,
+            "accepted_by": volunteer  # 🔥 PRIVATE ownership
+        }}
     )
+    return jsonify({"message": "Delivery accepted"}), 200
 
-    return jsonify({"message": "Delivery accepted and shelter notified!"}), 200
+# VOLUNTEER DASHBOARD — ONLY their accepted deliveries
+@app.route("/api/my_deliveries/<email>", methods=["GET"])
+def my_deliveries(email):
+    res = list(donations.find({"accepted_by": email}))
+    for r in res:
+        r["_id"] = str(r["_id"])
+    return jsonify(res), 200
 
-
-# ------------------------------------------------------
-# SHELTER GETS THEIR OWN REQUESTS
-# ------------------------------------------------------
-@app.route("/api/my_shelter_requests/<email>", methods=["GET"])
-def my_shelter_requests(email):
-    data = []
-    for d in donations.find({"shelter_request.email": email}):
-        d["_id"] = str(d["_id"])
-        data.append(d)
-    return jsonify(data), 200
-
-
-# ------------------------------------------------------
-# SHELTER NOTIFICATIONS
-# ------------------------------------------------------
-@app.route("/api/notifications/<shelter_email>", methods=["GET"])
-def get_notifications(shelter_email):
-    notes = []
-    for d in donations.find({"notifications.to": shelter_email}):
-        for n in d.get("notifications", []):
-            if n.get("to") == shelter_email:
-                notes.append(n)
-
-    return jsonify(notes), 200
-
-
-# ------------------------------------------------------
 # HEALTH CHECK
-# ------------------------------------------------------
 @app.route("/")
 def home():
-    return jsonify({"message": "CirclEats backend running successfully!"})
-
+    return jsonify({"message": "CirclEats backend running!"})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=7860)
