@@ -31,7 +31,7 @@ def signup():
         "email": data["email"],
         "password": hashed
     })
-    return jsonify({"message": "Signup successful!"}), 201
+    return jsonify({"message": "Signup successful"}), 201
 
 # LOGIN
 @app.route("/api/login", methods=["POST"])
@@ -49,10 +49,11 @@ def login():
 
     return jsonify({"error": "Invalid credentials"}), 401
 
-# CREATE DONATION  (Donor)
+# CREATE DONATION (Donor)
 @app.route("/api/create_donation", methods=["POST"])
 def create_donation():
     data = request.get_json()
+
     donations.insert_one({
         "user_id": data.get("user_id"),
         "item": data.get("item"),
@@ -61,12 +62,11 @@ def create_donation():
         "status": "Pending",
         "requested_by": None,
         "accepted_by": None,
-        "shelter_request": None,
-        "notifications": []
+        "shelter_request": None
     })
     return jsonify({"message": "Donation created"}), 201
 
-# DONOR DASHBOARD — Clean, private
+# DONOR DASHBOARD — Private
 @app.route("/api/my_donations/<user_id>", methods=["GET"])
 def my_donations(user_id):
     res = list(donations.find({"user_id": user_id}))
@@ -74,23 +74,16 @@ def my_donations(user_id):
         r["_id"] = str(r["_id"])
     return jsonify(res), 200
 
-# ➡ Hides all volunteer notifications from others
-@app.route("/api/my_notifications/<user_id>", methods=["GET"])
-def my_notifications(user_id):
-    res = []
-    for d in donations.find({"user_id": user_id}):
-        res.extend(d.get("notifications", []))
-    return jsonify(res), 200
-
-# SHELTER REQUESTS DELIVERY
+# SHELTER REQUESTS FOOD (delivery or pickup)
 @app.route("/api/shelter_request/<donation_id>", methods=["PUT"])
 def shelter_request(donation_id):
     data = request.get_json()
+
     donations.update_one(
         {"_id": ObjectId(donation_id)},
         {"$set": {
             "status": "Requested",
-            "requested_by": data.get("shelter"),  # 🔥 PRIVATE ownership
+            "requested_by": data.get("shelter"), # ⬅ private ownership added
             "shelter_request": {
                 "email": data.get("shelter"),
                 "location": data.get("location"),
@@ -98,9 +91,9 @@ def shelter_request(donation_id):
             }
         }}
     )
-    return jsonify({"message": "Request submitted"}), 200
+    return jsonify({"message": "Food request created"}), 200
 
-# SHELTER DASHBOARD — Own private requests only
+# SHELTER DASHBOARD — Only own requests
 @app.route("/api/my_requests/<email>", methods=["GET"])
 def my_requests(email):
     res = list(donations.find({"requested_by": email}))
@@ -108,7 +101,7 @@ def my_requests(email):
         r["_id"] = str(r["_id"])
     return jsonify(res), 200
 
-# VOLUNTEER VISIBLE REQUESTS ONLY
+# VOLUNTEER LIST OF AVAILABLE REQUESTS
 @app.route("/api/shelter_requests", methods=["GET"])
 def shelter_requests():
     res = list(donations.find({"status": "Requested"}))
@@ -116,23 +109,23 @@ def shelter_requests():
         r["_id"] = str(r["_id"])
     return jsonify(res), 200
 
-# VOLUNTEER ACCEPT DELIVERY
+# VOLUNTEER ACCEPTS DELIVERY
 @app.route("/api/accept_delivery/<donation_id>", methods=["PUT"])
 def accept_delivery(donation_id):
     data = request.get_json()
-    volunteer = data.get("volunteer")
+    volunteer_email = data.get("volunteer")
 
     donations.update_one(
         {"_id": ObjectId(donation_id)},
         {"$set": {
             "status": "In Transit",
-            "collected_by": volunteer,
-            "accepted_by": volunteer  # 🔥 PRIVATE ownership
+            "accepted_by": volunteer_email,  # ⬅ private ownership added
+            "collected_by": volunteer_email
         }}
     )
     return jsonify({"message": "Delivery accepted"}), 200
 
-# VOLUNTEER DASHBOARD — ONLY their accepted deliveries
+# VOLUNTEER DASHBOARD — Only own accepted deliveries
 @app.route("/api/my_deliveries/<email>", methods=["GET"])
 def my_deliveries(email):
     res = list(donations.find({"accepted_by": email}))
@@ -143,7 +136,7 @@ def my_deliveries(email):
 # HEALTH CHECK
 @app.route("/")
 def home():
-    return jsonify({"message": "CirclEats backend running!"})
+    return jsonify({"message": "Backend running"}), 200
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=7860)
